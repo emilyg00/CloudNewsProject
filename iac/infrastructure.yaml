@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: 'Infrastruttura Cloud News - Nomi Automatici con Variabili Ambiente'
+
+Resources:
+  # 1. DATABASE DYNAMODB
+  NewsDynamoTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      AttributeDefinitions:
+        - AttributeName: NewsId
+          AttributeType: S
+      KeySchema:
+        - AttributeName: NewsId
+          KeyType: HASH
+      BillingMode: PAY_PER_REQUEST
+
+  # 2. STORAGE S3
+  RawNewsBucket:
+    Type: AWS::S3::Bucket
+
+  # 3. RUOLO IAM ECS
+  MyExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+        - arn:aws:iam::aws:policy/AmazonS3FullAccess
+        - arn:aws:iam::aws:policy/AmazonDynamoDBFullAccess
+
+  # 4. CLUSTER ECS
+  MyECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: NewsScraperCluster-Final
+
+  # 5. LOG GROUP
+  MyLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: /ecs/news-scraper-final
+      RetentionInDays: 7
+
+  # 6. TASK DEFINITION
+  MyTaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: news-scraper-task-final
+      Cpu: '256'
+      Memory: '512'
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt MyExecutionRole.Arn
+      TaskRoleArn: !GetAtt MyExecutionRole.Arn
+      ContainerDefinitions:
+        - Name: news-scraper-container
+          Image: "529544622043.dkr.ecr.eu-central-1.amazonaws.com/news-scraper-repo:latest"
+          # AGGIUNTE LE VARIABILI D'AMBIENTE QUI SOTTO
+          Environment:
+            - Name: BUCKET_NAME
+              Value: "progetto-finale-news-rawnewsbucket-lylvfnkdtxzs"
+            - Name: TABLE_NAME
+              Value: "progetto-finale-news-NewsDynamoTable-P2HED58Q4H6P"
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref MyLogGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: ecs

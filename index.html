@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cloud Intelligence Pro | AWS Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://sdk.amazonaws.com/js/aws-sdk-2.1500.0.min.js"></script>
+    
+    <style>
+        :root { --aws-navy: #232f3e; --aws-smile: #ff9900; --bg-color: #f0f4f8; }
+        body { font-family: 'Poppins', sans-serif; background-color: var(--bg-color); color: #333; transition: 0.3s; }
+        .navbar { background: var(--aws-navy); border-bottom: 4px solid var(--aws-smile); }
+        .card { border: none; border-radius: 15px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .nav-pills .nav-link { color: var(--aws-navy); font-weight: 600; border-radius: 20px; margin: 2px; font-size: 0.8rem; border: 1px solid #ddd; cursor: pointer; }
+        .nav-pills .nav-link.active { background-color: var(--aws-smile); color: var(--aws-navy); border-color: var(--aws-smile); }
+        .news-card { border-left: 5px solid var(--aws-smile); transition: 0.3s; }
+        .social-btn { width: 35px; height: 35px; border-radius: 50%; display: inline-flex; align-items: center; justify-content: center; color: white; margin-right: 5px; text-decoration: none; font-size: 0.9rem; }
+        .bg-whatsapp { background-color: #25d366; }
+        .bg-x { background-color: #000; }
+        .nav-tabs-profile .nav-link { color: rgba(255,255,255,0.7); border: none; font-size: 0.8rem; font-weight: 600; }
+        .nav-tabs-profile .nav-link.active { color: #fff; background: rgba(255,255,255,0.2); border-radius: 10px; }
+        body.dark-mode { background-color: #1a1a1a; color: #fff; }
+        body.dark-mode .card, body.dark-mode .nav-pills .nav-link { background-color: #2d2d2d; color: #fff; border-color: #444; }
+        
+        .search-container { max-width: 600px; margin: 0 auto 20px; }
+        .search-input { border-radius: 25px; border: 2px solid var(--aws-smile); padding: 10px 20px; }
+        .badge-ultimora { background-color: #d9534f; font-size: 0.7rem; padding: 3px 8px; border-radius: 5px; color: white; margin-left: 10px; animation: blinker 1.5s linear infinite; }
+        
+        @keyframes blinker { 50% { opacity: 0.5; } }
+
+        footer { background: var(--aws-navy); color: white; padding: 30px 0; margin-top: 50px; border-top: 4px solid var(--aws-smile); }
+        
+        .status-dot { height: 10px; width: 10px; background-color: #28a745; border-radius: 50%; display: inline-block; margin-right: 5px; }
+        #clock { font-size: 1.8rem; color: var(--aws-smile); font-weight: 700; }
+
+        .aws-link { color: var(--aws-smile); text-decoration: none; font-weight: bold; border: 1px solid var(--aws-smile); padding: 5px 15px; border-radius: 20px; transition: 0.3s; display: inline-block; margin-top: 10px; }
+        .aws-link:hover { background: var(--aws-smile); color: var(--aws-navy); }
+    </style>
+</head>
+<body id="mainBody">
+
+<nav class="navbar navbar-dark py-3 no-print">
+    <div class="container">
+        <a class="navbar-brand fw-bold fs-3" href="#"><i class="fab fa-aws me-2 text-warning"></i>CloudNews <span style="color:var(--aws-smile)"></span></a>
+        <div id="auth-status" class="d-flex align-items-center">
+            <button class="btn btn-warning fw-bold rounded-pill px-4 shadow-sm" onclick="showLogin()">Area Riservata</button>
+        </div>
+    </div>
+</nav>
+
+<div class="container mt-4">
+    <div class="search-container text-center">
+        <input type="text" id="newsSearch" class="form-control search-input shadow-sm" placeholder="🔍 Cerca tra le notizie (Motori, Tech, ecc...)" onkeyup="filterNews()">
+    </div>
+
+    <div id="user-dashboard" class="mb-4 d-none">
+        <div class="row g-3">
+            <div class="col-md-8">
+                <div class="card p-4 h-100 shadow-sm" style="background: linear-gradient(135deg, #232f3e 0%, #37475a 100%); color: white;">
+                    <ul class="nav nav-tabs border-0 mb-3 nav-tabs-profile" role="tablist">
+                        <li class="nav-item">
+                            <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-dash">Dashboard</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-lib">Libreria</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-comm">Community</button>
+                        </li>
+                        <li class="nav-item">
+                            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-notif" onclick="document.getElementById('notif-badge').classList.add('d-none')">
+                                Notifiche <span id="notif-badge" class="badge bg-danger d-none">!</span>
+                            </button>
+                        </li>
+                    </ul>
+                    <div class="tab-content">
+                        <div class="tab-pane fade show active" id="tab-dash">
+                            <div class="d-flex justify-content-between align-items-start">
+                                <div>
+                                    <h3 class="fw-bold mb-0">Comando Cloud: <span id="display-name">User</span></h3>
+                                    <p class="small opacity-75">ID Account: AWS-992384-IT</p>
+                                </div>
+                                <button class="btn btn-sm btn-outline-warning rounded-pill" onclick="location.reload()">Logout</button>
+                            </div>
+                            <div class="row mt-4 text-center">
+                                <div class="col-6 col-md-3">
+                                    <small class="d-block opacity-75">News Lette</small>
+                                    <h4 class="fw-bold" id="news-count">0</h4>
+                                </div>
+                                <div class="col-6 col-md-3">
+                                    <small class="d-block opacity-75">Storage S3</small>
+                                    <h4 class="fw-bold">1.2 GB</h4>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="tab-lib">
+                            <h5 class="fw-bold">Articoli Salvati</h5>
+                            <div id="saved-articles-list" class="small opacity-75 mt-2">Nessun articolo salvato.</div>
+                        </div>
+                        <div class="tab-pane fade" id="tab-comm">
+                            <h5 class="fw-bold">Commenti Inviati</h5>
+                            <div id="user-comments-log" class="small opacity-75 mt-2">Ancora nessuna interazione.</div>
+                        </div>
+                        <div class="tab-pane fade" id="tab-notif">
+                            <h5 class="fw-bold">Centro Notifiche Cloud</h5>
+                            <div id="notification-log" class="small opacity-75 mt-2">Non ci sono nuove notifiche.</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card p-4 h-100 shadow-sm">
+                    <h6 class="fw-bold"><i class="fas fa-sliders-h me-2 text-warning"></i>Preferenze</h6>
+                    <hr>
+                    <div class="form-check form-switch mb-2">
+                        <input class="form-check-input" type="checkbox" id="darkModeSwitch" onchange="toggleDarkMode()">
+                        <label class="form-check-label">Dark Mode Cloud</label>
+                    </div>
+                    <div class="mt-3">
+                        <label class="small fw-bold">Avvisami per news di:</label>
+                        <select id="notif-pref" class="form-select form-select-sm rounded-pill mt-1" onchange="updateSubscription()">
+                            <option value="None">Nessuna</option>
+                            <option value="Sport">Sport</option>
+                            <option value="Tech">Tech</option>
+                            <option value="Motori">Motori</option>
+                            <option value="Economia">Economia</option>
+                            <option value="News">News</option>
+                            <option value="Cucina">Cucina</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-4 mt-2">
+        <div class="col-lg-4" id="weather-sidebar">
+            <div class="card p-3 mb-4 shadow-sm text-center" style="background: var(--aws-navy); color: white;">
+                <div id="clock">00:00:00</div>
+                <div id="full-date" class="small opacity-75"></div>
+            </div>
+
+            <div class="card p-3 mb-4 shadow-sm">
+                <h6 class="fw-bold mb-3 small"><i class="fas fa-server me-2 text-success"></i>AWS Service Health</h6>
+                <div class="d-flex justify-content-between mb-2 small">
+                    <span><span class="status-dot"></span>EC2 Instances</span> <span class="badge bg-light text-dark border">Running</span>
+                </div>
+                <div class="d-flex justify-content-between mb-2 small">
+                    <span><span class="status-dot"></span>S3 Storage</span> <span class="badge bg-light text-dark border">Active</span>
+                </div>
+                <div class="d-flex justify-content-between small">
+                    <span><span class="status-dot"></span>Cloud News Bot</span> <span class="badge bg-light text-dark border">Online</span>
+                </div>
+            </div>
+
+            <div class="card p-3 mb-4 shadow-sm">
+                <h5 class="fw-bold mb-3 small"><i class="fas fa-cloud-sun me-2 text-primary"></i>Meteo Regionale</h5>
+                <iframe src="https://www.meteoblue.com/it/tempo/widget/daily/roma_italia_3169070?geoloc=fixed&days=4&tempunit=CELSIUS&pictoicon=1" style="width:100%;height:250px;border:none"></iframe>
+            </div>
+
+            <div class="card p-3 mb-4 shadow-sm">
+                <h5 class="fw-bold mb-3 small"><i class="fas fa-comments me-2 text-success"></i>Community Chat</h5>
+                <div id="comment-list" class="mb-3" style="max-height: 180px; overflow-y: auto; font-size: 0.85rem;"></div>
+                <div class="input-group input-group-sm">
+                    <input type="text" id="user-comment" class="form-control" placeholder="Scrivi...">
+                    <button class="btn btn-warning" onclick="addComment()"><i class="fas fa-paper-plane"></i></button>
+                </div>
+            </div>
+
+            <div class="card p-3 mb-4 shadow-sm text-center">
+                <h6 class="fw-bold mb-2 small">Distribuzione Fonti</h6>
+                <canvas id="sourcesChart"></canvas>
+            </div>
+        </div>
+
+        <div class="col-lg-8" id="news-section">
+            <div class="mb-4">
+                <h2 class="fw-bold">Top Headlines <span class="text-warning">Today</span></h2>
+                <div class="d-flex overflow-auto mt-3">
+                    <ul class="nav nav-pills bg-white p-2 rounded-pill shadow-sm flex-nowrap" id="categoryFilter">
+                        <li class="nav-item"><a class="nav-link active" onclick="filterCat('All')">Tutte</a></li>
+                        <li class="nav-item"><a class="nav-link" onclick="filterCat('News')">News</a></li>
+                        <li class="nav-item"><a class="nav-link" onclick="filterCat('Sport')">Sport</a></li>
+                        <li class="nav-item"><a class="nav-link" onclick="filterCat('Economia')">Economia</a></li>
+                        <li class="nav-item"><a class="nav-link" onclick="filterCat('Motori')">Motori</a></li>
+                        <li class="nav-item"><a class="nav-link" onclick="filterCat('Tech')">Tech</a></li>
+                        <li class="nav-item"><a class="nav-link" onclick="filterCat('Cucina')">Cucina</a></li>
+                        <li class="nav-item"><a class="nav-link" onclick="filterCat('Live')">Live</a></li>
+                    </ul>
+                </div>
+            </div>
+            <div id="news-container" class="row g-3"></div>
+        </div>
+    </div>
+</div>
+
+<footer>
+    <div class="container text-center">
+        <div class="mb-3">
+            <i class="fab fa-aws fa-2x mx-2 text-warning"></i>
+            <i class="fas fa-cloud fa-2x mx-2"></i>
+            <i class="fas fa-microchip fa-2x mx-2"></i>
+        </div>
+        <p class="mb-1"><strong>AWS News Intelligence Pro</strong></p>
+        <p class="small opacity-75">Sviluppato da <strong>Emily Gigliuto</strong> - Progetto Finale AWS Academy 2026</p>
+        <p class="small opacity-50">Dati sincronizzati tramite Python Scraper su Amazon S3 & DynamoDB</p>
+        <a href="https://aws.amazon.com/it/console/" target="_blank" class="aws-link">
+            <i class="fas fa-external-link-alt me-1"></i> AWS Console Access
+        </a>
+    </div>
+</footer>
+
+<div class="modal fade" id="loginModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content border-0 shadow-lg" style="border-radius: 20px;">
+            <div class="modal-header border-0 pb-0 justify-content-center pt-3">
+                <ul class="nav nav-pills bg-light rounded-pill p-1 shadow-sm" id="authTab" role="tablist">
+                    <li class="nav-item">
+                        <button class="nav-link active py-1 px-3" data-bs-toggle="tab" data-bs-target="#l-panel" style="font-size:0.75rem">Login</button>
+                    </li>
+                    <li class="nav-item">
+                        <button class="nav-link py-1 px-3" data-bs-toggle="tab" data-bs-target="#r-panel" style="font-size:0.75rem">Registrati</button>
+                    </li>
+                </ul>
+            </div>
+            <div class="modal-body p-4 text-center">
+                <div class="tab-content">
+                    <div class="tab-pane fade show active" id="l-panel">
+                        <input type="email" id="l-email" class="form-control form-control-sm rounded-pill mb-2" placeholder="Email">
+                        <input type="password" id="l-pass" class="form-control form-control-sm rounded-pill mb-3" placeholder="Password">
+                        <button class="btn btn-sm btn-warning w-100 rounded-pill fw-bold" onclick="handleAuth()">Entra</button>
+                    </div>
+                    <div class="tab-pane fade" id="r-panel">
+                        <input type="text" id="r-name" class="form-control form-control-sm rounded-pill mb-2" placeholder="Nome">
+                        <input type="email" id="r-email" class="form-control form-control-sm rounded-pill mb-2" placeholder="Email">
+                        <input type="password" id="r-pass" class="form-control form-control-sm rounded-pill mb-3" placeholder="Password">
+                        <button class="btn btn-sm btn-warning w-100 rounded-pill fw-bold" onclick="handleRegister()">Crea Account</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    // CONFIGURAZIONE AWS CLIENT
+    AWS.config.update({
+        region: 'eu-central-1',
+        accessKeyId: 'INSERIRE_CHIAVE_ACCESSO',
+        secretAccessKey: 'INSERIRE_CHIAVE_SEGRETA'
+    });
+    const docClient = new AWS.DynamoDB.DocumentClient();
+
+    let allNews = [];
+    let myChart = null;
+    let readCount = 0;
+    let isLoggedIn = false;
+    let currentUserEmail = ""; 
+
+    function updateClock() {
+        const ora = new Date();
+        document.getElementById('clock').innerText = ora.toLocaleTimeString('it-IT');
+        document.getElementById('full-date').innerText = ora.toLocaleDateString('it-IT', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+    }
+    setInterval(updateClock, 1000);
+    updateClock();
+
+    async function loadData() {
+        try {
+            const response = await fetch('news.json?t=' + new Date().getTime());
+            allNews = await response.json();
+            const oggi = new Date().toLocaleDateString();
+            const ultimaData = localStorage.getItem('last_comment_day');
+            
+            if (ultimaData && ultimaData !== oggi) {
+                localStorage.removeItem('cloud_comments');
+            }
+            localStorage.setItem('last_comment_day', oggi);
+
+            filterCat('All');
+            updateChart(allNews);
+
+            const savedComments = localStorage.getItem('cloud_comments');
+            if (savedComments) {
+                document.getElementById('comment-list').innerHTML = savedComments;
+                document.getElementById('user-comments-log').innerHTML = savedComments;
+            }
+        } catch(e) {
+            console.log("In attesa del file news.json...");
+        }
+    }
+
+    async function handleRegister() {
+        const name = document.getElementById('r-name').value;
+        const email = document.getElementById('r-email').value;
+        const pass = document.getElementById('r-pass').value;
+
+        if(!name || !email || !pass) { alert("Compila tutti i campi!"); return; }
+        
+        // --- SALVATAGGIO SU DYNAMODB PER LO SCRAPER ---
+        const params = {
+            TableName: "CloudUsers",
+            Item: {
+                "email": email,
+                "name": name,
+                "status": "pending",
+                "timestamp": new Date().toISOString()
+            }
+        };
+
+        try {
+            await docClient.put(params).promise();
+            console.log("Utente salvato su DynamoDB");
+            
+            alert("📧 Sistema AWS: È stata inviata una mail con il codice di conferma a: " + email + " (Automatizzato via EventBridge)");
+            
+            const inputCode = prompt("Inserisci il codice di conferma AWS ricevuto via email:");
+            
+            if(inputCode === "AWS-CONFIRM-2026") {
+                localStorage.setItem('user_' + email, JSON.stringify({name: name, pass: pass, confirmed: true}));
+                alert("✅ Account confermato e creato con successo! Ora puoi accedere.");
+                
+                const triggerEl = document.querySelector('#authTab button[data-bs-target="#l-panel"]');
+                bootstrap.Tab.getOrCreateInstance(triggerEl).show();
+            } else {
+                alert("❌ Codice errato! L'account non è stato attivato. Controlla la mail e riprova.");
+            }
+        } catch (err) {
+            console.error("Errore salvataggio DynamoDB:", err);
+            alert("Errore tecnico durante la registrazione. Riprova.");
+        }
+    }
+
+    function handleAuth() {
+        const email = document.getElementById('l-email').value;
+        const pass = document.getElementById('l-pass').value;
+        const userData = localStorage.getItem('user_' + email);
+        
+        if (userData) {
+            const user = JSON.parse(userData);
+            if(user.pass === pass) {
+                if(!user.confirmed) {
+                    alert("⚠️ Errore: Account non verificato via email!");
+                    return;
+                }
+                isLoggedIn = true;
+                currentUserEmail = email; 
+                document.getElementById('display-name').innerText = user.name;
+                document.getElementById('user-dashboard').classList.remove('d-none');
+                document.getElementById('auth-status').innerHTML = `<button class="btn btn-sm btn-warning rounded-pill px-3 py-1 shadow-sm small fw-bold">${user.name}</button>`;
+                
+                const modalEl = document.getElementById('loginModal');
+                const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
+                modal.hide();
+                return;
+            }
+        }
+        alert("Credenziali errate o utente non registrato!");
+    }
+
+    function updateSubscription() {
+        if(!isLoggedIn) { showLogin(); return; }
+        const pref = document.getElementById('notif-pref').value;
+        if(pref !== "None") {
+            addNotification(`Sincronizzazione Cloud attiva per: ${pref}. Email di alert inviata a: ${currentUserEmail}`);
+        }
+    }
+
+    function addNotification(msg) {
+        const log = document.getElementById('notification-log');
+        if(log.innerText.includes("Non ci sono")) log.innerHTML = "";
+        const time = new Date().toLocaleTimeString();
+        log.innerHTML = `<div class="p-2 border-bottom mb-1" style="background: rgba(255,153,0,0.1); border-radius: 10px;">
+                            <strong>[${time}]</strong> ${msg}
+                         </div>` + log.innerHTML;
+        document.getElementById('notif-badge').classList.remove('d-none');
+    }
+
+    function addComment() {
+        if (!isLoggedIn) { showLogin(); return; }
+        const input = document.getElementById('user-comment');
+        if (!input.value) return;
+        const dataOra = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        const html = `<div class="border-bottom pb-2 mb-2">
+                        <small class="text-muted d-block" style="font-size: 0.65rem;">${dataOra}</small>
+                        <strong>Tu:</strong> ${input.value}
+                      </div>`;
+        document.getElementById('comment-list').innerHTML += html;
+        document.getElementById('user-comments-log').innerHTML += html;
+        localStorage.setItem('cloud_comments', document.getElementById('comment-list').innerHTML);
+        input.value = "";
+    }
+
+    function saveArticle(title) {
+        if (!isLoggedIn) { showLogin(); return; }
+        const list = document.getElementById('saved-articles-list');
+        if(list.innerText.includes("Nessun")) list.innerHTML = "";
+        list.innerHTML += `<div class="mb-1">• ${title}</div>`;
+        alert("Salvato in libreria!");
+    }
+
+    function filterNews() {
+        const term = document.getElementById('newsSearch').value.toLowerCase();
+        const filtered = allNews.filter(n => 
+            n.Title.toLowerCase().includes(term) || 
+            n.Category.toLowerCase().includes(term) ||
+            n.Source.toLowerCase().includes(term)
+        );
+        displayNews(filtered);
+    }
+
+    function filterCat(cat) {
+        document.querySelectorAll('#categoryFilter .nav-link').forEach(link => {
+            link.classList.remove('active');
+            if(link.innerText.trim() === cat || (cat==='All' && link.innerText.trim()==='Tutte')) {
+                link.classList.add('active');
+            }
+        });
+        const filtered = cat === 'All' ? allNews : allNews.filter(n => 
+            n.Category.trim().toLowerCase() === cat.toLowerCase().trim()
+        );
+        displayNews(filtered);
+    }
+
+    function displayNews(newsToDisplay) {
+        const container = document.getElementById('news-container');
+        if (newsToDisplay.length === 0) {
+            container.innerHTML = '<div class="col-12 text-center py-5"><h5>Nessuna notizia trovata</h5></div>';
+            return;
+        }
+        container.innerHTML = newsToDisplay.map((item, index) => `
+            <div class="col-12">
+                <div class="card p-3 shadow-sm news-card">
+                    <div class="d-flex justify-content-between mb-2 small fw-bold">
+                        <span class="text-navy">${item.Source}</span>
+                        <div>
+                            <span class="text-warning text-uppercase">${item.Category}</span>
+                            ${index < 3 ? '<span class="badge-ultimora">ULTIM\'ORA</span>' : ''}
+                        </div>
+                    </div>
+                    <h5 class="fw-bold mb-1">${item.Title}</h5>
+                    <div class="small text-muted mb-3"><i class="far fa-clock me-1"></i>Pubblicato: ${item.PublishedDate || 'In tempo reale'}</div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <a href="${item.Link}" target="_blank" onclick="readCount++; document.getElementById('news-count').innerText = readCount;" class="btn btn-sm btn-dark rounded-pill px-3">Leggi News</a>
+                        <div class="d-flex align-items-center">
+                            <button onclick="saveArticle('${item.Title.replace(/'/g, "\\'")}')" class="btn btn-xs btn-outline-warning rounded-circle me-3" style="width:30px;height:30px;padding:0"><i class="fas fa-bookmark"></i></button>
+                            <a href="https://wa.me/?text=${encodeURIComponent(item.Title)}" class="social-btn bg-whatsapp" target="_blank"><i class="fab fa-whatsapp"></i></a>
+                            <a href="https://twitter.com/intent/tweet?text=${encodeURIComponent(item.Title)}" class="social-btn bg-x" target="_blank"><i class="fa-brands fa-x-twitter"></i></a>
+                        </div>
+                    </div>
+                </div>
+            </div>`).join('');
+
+        const currentPref = document.getElementById('notif-pref').value;
+        if(isLoggedIn && currentPref !== "None") {
+            const hasMatch = newsToDisplay.some(n => n.Category.trim().toLowerCase() === currentPref.toLowerCase());
+            if(hasMatch) {
+                addNotification(`🔔 Cloud Alert: Trovati nuovi aggiornamenti per ${currentPref}`);
+            }
+        }
+    }
+
+    function updateChart(news) {
+        const counts = {};
+        news.forEach(n => counts[n.Source] = (counts[n.Source] || 0) + 1);
+        const ctx = document.getElementById('sourcesChart').getContext('2d');
+        if (myChart) myChart.destroy();
+        myChart = new Chart(ctx, {
+            type: 'doughnut',
+            data: { 
+                labels: Object.keys(counts), 
+                datasets: [{ 
+                    data: Object.values(counts), 
+                    backgroundColor: ['#ff9900', '#232f3e', '#0073bb', '#d9534f', '#28a745', '#5bc0de'] 
+                }] 
+            },
+            options: { cutout: '70%', plugins: { legend: { display: false } } }
+        });
+    }
+
+    function toggleDarkMode() { document.getElementById('mainBody').classList.toggle('dark-mode'); }
+    function showLogin() { new bootstrap.Modal(document.getElementById('loginModal')).show(); }
+    loadData();
+</script>
+</body>
+</html>
