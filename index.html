@@ -45,7 +45,7 @@
 
 <nav class="navbar navbar-dark py-3 no-print">
     <div class="container">
-        <a class="navbar-brand fw-bold fs-3" href="#"><i class="fab fa-aws me-2 text-warning"></i>CloudNews <span style="color:var(--aws-smile)"></span></a>
+        <a class="navbar-brand fw-bold fs-3" href="#"><i class="fab fa-aws me-2 text-warning"></i>CloudNews</a>
         <div id="auth-status" class="d-flex align-items-center">
             <button class="btn btn-warning fw-bold rounded-pill px-4 shadow-sm" onclick="showLogin()">Area Riservata</button>
         </div>
@@ -302,7 +302,6 @@
 
         if(!name || !email || !pass) { alert("Compila tutti i campi!"); return; }
         
-        // --- SALVATAGGIO SU DYNAMODB PER LO SCRAPER ---
         const params = {
             TableName: "CloudUsers",
             Item: {
@@ -315,24 +314,20 @@
 
         try {
             await docClient.put(params).promise();
-            console.log("Utente salvato su DynamoDB");
-            
-            alert("📧 Sistema AWS: È stata inviata una mail con il codice di conferma a: " + email + " (Automatizzato via EventBridge)");
+            alert("📧 Sistema AWS: È stata inviata una mail con il codice di conferma a: " + email);
             
             const inputCode = prompt("Inserisci il codice di conferma AWS ricevuto via email:");
             
             if(inputCode === "AWS-CONFIRM-2026") {
                 localStorage.setItem('user_' + email, JSON.stringify({name: name, pass: pass, confirmed: true}));
-                alert("✅ Account confermato e creato con successo! Ora puoi accedere.");
-                
+                alert("✅ Account confermato! Ora puoi accedere.");
                 const triggerEl = document.querySelector('#authTab button[data-bs-target="#l-panel"]');
                 bootstrap.Tab.getOrCreateInstance(triggerEl).show();
             } else {
-                alert("❌ Codice errato! L'account non è stato attivato. Controlla la mail e riprova.");
+                alert("❌ Codice errato!");
             }
         } catch (err) {
-            console.error("Errore salvataggio DynamoDB:", err);
-            alert("Errore tecnico durante la registrazione. Riprova.");
+            console.error("Errore DynamoDB:", err);
         }
     }
 
@@ -343,31 +338,45 @@
         
         if (userData) {
             const user = JSON.parse(userData);
-            if(user.pass === pass) {
-                if(!user.confirmed) {
-                    alert("⚠️ Errore: Account non verificato via email!");
-                    return;
-                }
+            if(user.pass === pass && user.confirmed) {
                 isLoggedIn = true;
                 currentUserEmail = email; 
                 document.getElementById('display-name').innerText = user.name;
                 document.getElementById('user-dashboard').classList.remove('d-none');
-                document.getElementById('auth-status').innerHTML = `<button class="btn btn-sm btn-warning rounded-pill px-3 py-1 shadow-sm small fw-bold">${user.name}</button>`;
-                
-                const modalEl = document.getElementById('loginModal');
-                const modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
-                modal.hide();
+                document.getElementById('auth-status').innerHTML = `<button class="btn btn-sm btn-warning rounded-pill px-3 py-1 shadow-sm fw-bold">${user.name}</button>`;
+                bootstrap.Modal.getInstance(document.getElementById('loginModal')).hide();
                 return;
             }
         }
-        alert("Credenziali errate o utente non registrato!");
+        alert("Errore accesso!");
     }
 
-    function updateSubscription() {
+    // --- FUNZIONE AGGIORNATA PER SALVATAGGIO PREFERENZE ---
+    async function updateSubscription() {
         if(!isLoggedIn) { showLogin(); return; }
+        
         const pref = document.getElementById('notif-pref').value;
-        if(pref !== "None") {
-            addNotification(`Sincronizzazione Cloud attiva per: ${pref}. Email di alert inviata a: ${currentUserEmail}`);
+        
+        // Salvataggio su DynamoDB
+        const params = {
+            TableName: "CloudUsers",
+            Key: { "email": currentUserEmail },
+            UpdateExpression: "set preference = :p",
+            ExpressionAttributeValues: { ":p": pref }
+        };
+
+        try {
+            await docClient.update(params).promise();
+            console.log("Preferenza salvata su AWS:", pref);
+            
+            if(pref !== "None") {
+                addNotification(`Sincronizzazione Cloud attiva per: ${pref}.`);
+                alert("Preferenza salvata! Riceverai via mail solo notizie di: " + pref);
+            } else {
+                addNotification("Notifiche email disattivate.");
+            }
+        } catch (err) {
+            console.error("Errore salvataggio DynamoDB:", err);
         }
     }
 
@@ -385,11 +394,7 @@
         if (!isLoggedIn) { showLogin(); return; }
         const input = document.getElementById('user-comment');
         if (!input.value) return;
-        const dataOra = new Date().toLocaleString('it-IT', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
-        const html = `<div class="border-bottom pb-2 mb-2">
-                        <small class="text-muted d-block" style="font-size: 0.65rem;">${dataOra}</small>
-                        <strong>Tu:</strong> ${input.value}
-                      </div>`;
+        const html = `<div class="border-bottom pb-2 mb-2"><strong>Tu:</strong> ${input.value}</div>`;
         document.getElementById('comment-list').innerHTML += html;
         document.getElementById('user-comments-log').innerHTML += html;
         localStorage.setItem('cloud_comments', document.getElementById('comment-list').innerHTML);
@@ -401,36 +406,28 @@
         const list = document.getElementById('saved-articles-list');
         if(list.innerText.includes("Nessun")) list.innerHTML = "";
         list.innerHTML += `<div class="mb-1">• ${title}</div>`;
-        alert("Salvato in libreria!");
+        alert("Salvato!");
     }
 
     function filterNews() {
         const term = document.getElementById('newsSearch').value.toLowerCase();
-        const filtered = allNews.filter(n => 
-            n.Title.toLowerCase().includes(term) || 
-            n.Category.toLowerCase().includes(term) ||
-            n.Source.toLowerCase().includes(term)
-        );
+        const filtered = allNews.filter(n => n.Title.toLowerCase().includes(term) || n.Category.toLowerCase().includes(term));
         displayNews(filtered);
     }
 
     function filterCat(cat) {
         document.querySelectorAll('#categoryFilter .nav-link').forEach(link => {
             link.classList.remove('active');
-            if(link.innerText.trim() === cat || (cat==='All' && link.innerText.trim()==='Tutte')) {
-                link.classList.add('active');
-            }
+            if(link.innerText.trim() === cat || (cat==='All' && link.innerText.trim()==='Tutte')) link.classList.add('active');
         });
-        const filtered = cat === 'All' ? allNews : allNews.filter(n => 
-            n.Category.trim().toLowerCase() === cat.toLowerCase().trim()
-        );
+        const filtered = cat === 'All' ? allNews : allNews.filter(n => n.Category.toLowerCase() === cat.toLowerCase());
         displayNews(filtered);
     }
 
     function displayNews(newsToDisplay) {
         const container = document.getElementById('news-container');
         if (newsToDisplay.length === 0) {
-            container.innerHTML = '<div class="col-12 text-center py-5"><h5>Nessuna notizia trovata</h5></div>';
+            container.innerHTML = '<div class="col-12 text-center py-5"><h5>Nessuna notizia</h5></div>';
             return;
         }
         container.innerHTML = newsToDisplay.map((item, index) => `
@@ -438,31 +435,16 @@
                 <div class="card p-3 shadow-sm news-card">
                     <div class="d-flex justify-content-between mb-2 small fw-bold">
                         <span class="text-navy">${item.Source}</span>
-                        <div>
-                            <span class="text-warning text-uppercase">${item.Category}</span>
-                            ${index < 3 ? '<span class="badge-ultimora">ULTIM\'ORA</span>' : ''}
-                        </div>
+                        <span class="text-warning text-uppercase">${item.Category}</span>
                     </div>
                     <h5 class="fw-bold mb-1">${item.Title}</h5>
-                    <div class="small text-muted mb-3"><i class="far fa-clock me-1"></i>Pubblicato: ${item.PublishedDate || 'In tempo reale'}</div>
+                    <div class="small text-muted mb-3"><i class="far fa-clock me-1"></i>${item.PublishedDate || 'Live'}</div>
                     <div class="d-flex justify-content-between align-items-center">
-                        <a href="${item.Link}" target="_blank" onclick="readCount++; document.getElementById('news-count').innerText = readCount;" class="btn btn-sm btn-dark rounded-pill px-3">Leggi News</a>
-                        <div class="d-flex align-items-center">
-                            <button onclick="saveArticle('${item.Title.replace(/'/g, "\\'")}')" class="btn btn-xs btn-outline-warning rounded-circle me-3" style="width:30px;height:30px;padding:0"><i class="fas fa-bookmark"></i></button>
-                            <a href="https://wa.me/?text=${encodeURIComponent(item.Title)}" class="social-btn bg-whatsapp" target="_blank"><i class="fab fa-whatsapp"></i></a>
-                            <a href="https://twitter.com/intent/tweet?text=${encodeURIComponent(item.Title)}" class="social-btn bg-x" target="_blank"><i class="fa-brands fa-x-twitter"></i></a>
-                        </div>
+                        <a href="${item.Link}" target="_blank" onclick="readCount++; document.getElementById('news-count').innerText = readCount;" class="btn btn-sm btn-dark rounded-pill px-3">Leggi</a>
+                        <button onclick="saveArticle('${item.Title.replace(/'/g, "\\'")}')" class="btn btn-xs btn-outline-warning rounded-circle"><i class="fas fa-bookmark"></i></button>
                     </div>
                 </div>
             </div>`).join('');
-
-        const currentPref = document.getElementById('notif-pref').value;
-        if(isLoggedIn && currentPref !== "None") {
-            const hasMatch = newsToDisplay.some(n => n.Category.trim().toLowerCase() === currentPref.toLowerCase());
-            if(hasMatch) {
-                addNotification(`🔔 Cloud Alert: Trovati nuovi aggiornamenti per ${currentPref}`);
-            }
-        }
     }
 
     function updateChart(news) {
@@ -476,7 +458,7 @@
                 labels: Object.keys(counts), 
                 datasets: [{ 
                     data: Object.values(counts), 
-                    backgroundColor: ['#ff9900', '#232f3e', '#0073bb', '#d9534f', '#28a745', '#5bc0de'] 
+                    backgroundColor: ['#ff9900', '#232f3e', '#0073bb', '#d9534f'] 
                 }] 
             },
             options: { cutout: '70%', plugins: { legend: { display: false } } }
