@@ -42,7 +42,7 @@ def check_and_notify_new_users():
                 message = (f"Ciao {nome_utente}!\n\n"
                            f"Grazie per esserti registrato a CloudNews.\n"
                            f"Codice di attivazione: AWS-CONFIRM-2026\n\n"
-                           f"Benvenuto nell'infrastruttura di Emily!")
+                           f"Welcome nell'infrastruttura di Emily!")
                 
                 sns.publish(
                     TopicArn=SNS_TOPIC_ARN,
