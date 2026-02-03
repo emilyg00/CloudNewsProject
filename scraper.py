@@ -26,7 +26,7 @@ FEEDS = {
 
 def check_and_notify_new_users():
     """Invia il codice di attivazione SOLO ai nuovi utenti registrati"""
-    print(f"--- 📧 Scansione tabella {USERS_TABLE} per i nuovi utenti iscritti ---")
+    print(f"--- 📧 Scansione tabella {USERS_TABLE} per gli utenti iscritti ---")
     try:
         response = users_table.scan()
         users = response.get('Items', [])
